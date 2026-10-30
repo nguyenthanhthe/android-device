@@ -1,0 +1,17 @@
+# Binaries and portable tools (downloaded on demand or via winget)
+tools/platform-tools/
+tools/scrcpy/
+tools/mtkclient/
+tools/apks/*.apk
+
+# Screenshots
+screenshots/*.png
+!screenshots/.gitkeep
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local system files
+Thumbs.db
+.DS_Store

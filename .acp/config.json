@@ -1,0 +1,64 @@
+{
+  "$schema": "https://agentclientprotocol.org/schema/v1/acp.json",
+  "version": "1.0",
+  "protocol": "acp",
+  "client": {
+    "name": "Android Studio",
+    "compatibility": "Quail 1+"
+  },
+  "agent": {
+    "id": "antigravity",
+    "name": "Antigravity Agent",
+    "version": "1.0.0",
+    "transport": "stdio",
+    "command": "antigravity",
+    "args": [
+      "--acp",
+      "--stdio"
+    ],
+    "enabled": true,
+    "trusted": true,
+    "description": "Antigravity AI Coding Agent connected via Agent Client Protocol (ACP) for Android Studio",
+    "capabilities": {
+      "context_reading": {
+        "enabled": true,
+        "ide_index": true,
+        "symbol_resolution": true,
+        "syntax_tree": true,
+        "file_hierarchy": true
+      },
+      "command_execution": {
+        "enabled": true,
+        "allowed_commands": [
+          "android preview *",
+          "android studio *",
+          "android *",
+          "./gradlew *",
+          "gradlew.bat *",
+          "adb *"
+        ],
+        "default_working_directory": "${workspaceFolder}"
+      },
+      "file_editing": {
+        "enabled": true,
+        "mode": "diff",
+        "atomic_write": true,
+        "auto_format": true
+      }
+    },
+    "permissions": {
+      "context:read": {
+        "action": "allow",
+        "scope": "workspace"
+      },
+      "command:execute": {
+        "action": "allow",
+        "scope": "project"
+      },
+      "file:edit": {
+        "action": "allow",
+        "scope": "project"
+      }
+    }
+  }
+}

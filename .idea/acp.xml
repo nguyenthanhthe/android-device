@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AgentClientProtocolSettings">
+    <option name="enabled" value="true" />
+    <option name="defaultAgent" value="antigravity" />
+    <option name="autoApproveSafeActions" value="true" />
+    <agent id="antigravity" name="Antigravity Agent" transport="stdio" enabled="true" trusted="true">
+      <command>antigravity</command>
+      <args>
+        <arg>--acp</arg>
+        <arg>--stdio</arg>
+      </args>
+      <permissions>
+        <!-- Permission 1: Direct Context Reading from IDE Index -->
+        <permission type="context_reading" status="ALLOW">
+          <scope name="PROJECT_INDEX" />
+          <scope name="SYMBOL_TREE" />
+          <scope name="SYNTAX_HIERARCHY" />
+        </permission>
+        <!-- Permission 2: Command Execution (android preview, gradlew, adb) -->
+        <permission type="command_execution" status="ALLOW">
+          <pattern>android preview*</pattern>
+          <pattern>android studio*</pattern>
+          <pattern>./gradlew*</pattern>
+          <pattern>gradlew.bat*</pattern>
+          <pattern>android*</pattern>
+          <pattern>adb*</pattern>
+        </permission>
+        <!-- Permission 3: File Editing in Workspace -->
+        <permission type="file_editing" status="ALLOW" mode="DIFF_PATCH" />
+      </permissions>
+      <integration>
+        <composePreview autoTrigger="true" command="android preview render --daemon --component-tree" />
+        <diagnostics syncOnSave="true" />
+      </integration>
+    </agent>
+  </component>
+</project>
