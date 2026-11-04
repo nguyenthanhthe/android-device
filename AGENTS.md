@@ -126,16 +126,22 @@ adb connect 100.100.241.85:5555   # Tailscale (địa chỉ cố định)
 
 Toàn bộ thư mục `wv-bot/` (đặc biệt `wv-bot/wvbot/`) là **vùng tự do hoàn toàn** cho agent:
 bảo trì + phát triển tính năng mới **chạy vòng lặp liên tục, không dừng lại, không giới hạn
-bất kỳ thứ gì**. User cho phép làm mọi thứ trong vùng này (2026-11-05).
+bất kỳ thứ gì**. User cho phép làm mọi thứ trong vùng này (2026-11-05), **không cần hỏi lại
+sự cho phép** cho bất kỳ thay đổi nào bên trong vùng.
 
-- **Không bao giờ dừng idle:** xong một việc thì chọn việc tiếp theo (backlog,
-  `wv-bot/docs/FEATURE-PLAN.md`, hardening, test) và làm ngay.
+- **Không bao giờ dừng idle.** Xong một việc thì chọn việc tiếp theo ngay, theo thứ tự ưu
+  tiên: (1) kiểm tra bot live — `adb forward tcp:8787 tcp:8787` rồi
+  `curl http://127.0.0.1:8787/api/status`, sửa ngay cái đang hỏng; (2) bug/hardening giao
+  thức (viết test trước khi fix); (3) backlog `wv-bot/docs/FEATURE-PLAN.md`; (4) dọn
+  docs/changelog/publish.
 - **Mọi thay đổi đều commit + push ngay** (`origin/main`, per-component commit,
   `feat:` / `fix:` / `chore:`), chỉ commit khi test 100% xanh:
   `cd wv-bot && python -m unittest discover -s tests`.
-- **Deploy điện thoại sau mỗi đợt sửa:** `python wv-bot/tools/deploy.py` (package → run-as
-  unpack/swap → restart → verify version trên dashboard `:8787`).
-- **Repo công khai `nguyenthanhthe/webot`** (remote `github`): sync bằng
+- **Deploy theo ĐỢT, không deploy theo commit** (`python wv-bot/tools/deploy.py`): mỗi lần
+  deploy làm ngắt 1 game giữa chừng và đếm vào exit-countdown của server — dồn nhiều lần
+  deploy sẽ dính ban ngắn (đã xảy ra: ban 2,5 phút; bot tự chờ đúng `bannedUntilTime` rồi
+  vào lại). Gộp vài sửa đổi rồi deploy một lần, verify version trên dashboard `:8787`.
+- **Repo công khai `nguyenthanhthe/webot`** (remote `github`): sync sau mỗi đợt bằng
   `git subtree split --prefix=wv-bot -b webot-splitN` → merge trong worktree
   `D:\Project\webot` → `git push github HEAD:main` → xoá nhánh split tạm.
 - Ranh giới vẫn giữ nguyên như mục 4: không flash ROM, không đụng credential
