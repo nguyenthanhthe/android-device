@@ -119,3 +119,24 @@ adb connect 100.100.241.85:5555   # Tailscale (địa chỉ cố định)
 - `.gitignore` đã loại `tools/platform-tools`, `tools/scrcpy`, `tools/mtkclient`, `tools/apks/*.apk`, `screenshots/*.png`, `__pycache__`.
 - **Không commit** các artifact tạm (`search.html`, `*.png` sinh ra lúc test, `test_screen.png`, `duckduckgo.apk` lớn) trừ khi thực sự cần.
 - Commit theo từng thay đổi logic, message có tiền tố `feat:` / `fix:` / `chore:`.
+
+---
+
+## 8. wv-bot: mandate phát triển liên tục (chỉ thị của user, 2026-11-05)
+
+Toàn bộ thư mục `wv-bot/` (đặc biệt `wv-bot/wvbot/`) là **vùng tự do hoàn toàn** cho agent:
+bảo trì + phát triển tính năng mới **chạy vòng lặp liên tục, không dừng lại, không giới hạn
+bất kỳ thứ gì**. User cho phép làm mọi thứ trong vùng này (2026-11-05).
+
+- **Không bao giờ dừng idle:** xong một việc thì chọn việc tiếp theo (backlog,
+  `wv-bot/docs/FEATURE-PLAN.md`, hardening, test) và làm ngay.
+- **Mọi thay đổi đều commit + push ngay** (`origin/main`, per-component commit,
+  `feat:` / `fix:` / `chore:`), chỉ commit khi test 100% xanh:
+  `cd wv-bot && python -m unittest discover -s tests`.
+- **Deploy điện thoại sau mỗi đợt sửa:** `python wv-bot/tools/deploy.py` (package → run-as
+  unpack/swap → restart → verify version trên dashboard `:8787`).
+- **Repo công khai `nguyenthanhthe/webot`** (remote `github`): sync bằng
+  `git subtree split --prefix=wv-bot -b webot-splitN` → merge trong worktree
+  `D:\Project\webot` → `git push github HEAD:main` → xoá nhánh split tạm.
+- Ranh giới vẫn giữ nguyên như mục 4: không flash ROM, không đụng credential
+  (`refresh_token.txt`), không xoá app hệ thống.
