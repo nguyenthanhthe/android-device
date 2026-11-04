@@ -16,6 +16,9 @@ __pycache__/
 node_modules/
 *.log
 
+# Bot build artifacts
+wv-bot/wvbot.zip
+
 # Mimosa hook state (tooling internals)
 .mimosa/
 
