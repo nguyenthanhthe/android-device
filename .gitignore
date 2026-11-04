@@ -4,6 +4,10 @@ tools/scrcpy/
 tools/mtkclient/
 tools/apks/*.apk
 
+# RE lab lives OUTSIDE the repo (D:\Project\re-lab) — clones, decompiled APKs,
+# and other untrusted downloads never enter the git tree.
+
+
 # Screenshots
 screenshots/*.png
 !screenshots/.gitkeep
