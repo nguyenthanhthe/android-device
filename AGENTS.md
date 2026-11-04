@@ -134,6 +134,9 @@ sự cho phép** cho bất kỳ thay đổi nào bên trong vùng.
   `curl http://127.0.0.1:8787/api/status`, sửa ngay cái đang hỏng; (2) bug/hardening giao
   thức (viết test trước khi fix); (3) backlog `wv-bot/docs/FEATURE-PLAN.md`; (4) dọn
   docs/changelog/publish.
+- **Cron tự động của ZCode** ("Vòng lặp wv-bot tự chạy lại mỗi 5 phút") bắn mỗi 5 phút với
+  prompt chứa đúng quy trình trên — vòng lặp tự duy trì cả khi không có session người dùng.
+  Cron được chỉnh qua tool CronList/CronUpdate, không dựng trùng cái thứ hai.
 - **Mọi thay đổi đều commit + push ngay** (`origin/main`, per-component commit,
   `feat:` / `fix:` / `chore:`), chỉ commit khi test 100% xanh:
   `cd wv-bot && python -m unittest discover -s tests`.
