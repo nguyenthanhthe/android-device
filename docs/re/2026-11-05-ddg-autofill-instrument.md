@@ -49,3 +49,20 @@ uninstall sẽ mất data).
 - `re-lab/out/duckduckgo-apktool/` — decode dir đã chứa hooks + move-NetworkModule
   (đó là state buildable, không xóa).
 - Backup decode "sạch" không cần — có thể decode lại từ APK gốc bất cứ lúc nào.
+
+## Cập nhật (vòng cron sau): onFillRequest đã fire — chuỗi hoàn chỉnh
+
+Wave 14 chỉ thấy `onConnected`; nguyên nhân `onFillRequest` "không fire":
+**process `com.duckduckgo.mobile.android:autofill` bị hệ thống FREEZE**
+(cached-process freezing). Round sau, chỉ cần focus lại field:
+
+```
+AutofillSession: Primary service ... RealAutofillService   ← session tạo
+sync unfroze 2058 com.duckduckgo.mobile.android:autofill    ← unfreeze!
+E SMALIHOOK: SMALIHOOK                                      ← hook chạy
+FillRequestEventLogger: AutofillFillRequestReported         ← FillRequest thật
+```
+
+→ Chuỗi **onConnected → onFillRequest hoạt động trọn vẹn**. Trigger chỉ cần:
+force-stop app target → mở lại → tap field (không cần reboot emulator).
+Debug verbose: `setprop debug.autofill.verbose true` + grep `AutofillSession`.
