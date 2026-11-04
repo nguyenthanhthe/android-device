@@ -140,3 +140,57 @@ bất kỳ thứ gì**. User cho phép làm mọi thứ trong vùng này (2026-1
   `D:\Project\webot` → `git push github HEAD:main` → xoá nhánh split tạm.
 - Ranh giới vẫn giữ nguyên như mục 4: không flash ROM, không đụng credential
   (`refresh_token.txt`), không xoá app hệ thống.
+
+---
+
+## 9. Vòng lặp liên tục RE/device (chỉ thị của user, 2026-11-05)
+
+Toàn bộ hoạt động **RE lab + mobilerun + crackmes** trên A03s cũng chạy theo
+chế độ **vòng lặp liên tục, không dừng lại** (user chỉ thị "chạy trong vòng lặp
+liên tục đừng dừng lại", khẳng định lại nhiều lần trong ngày 2026-11-05).
+
+### Always-on khi bắt đầu phiên
+
+1. **Kiểm tra monitor loop sống chưa** — heartbeat mới nhất trong
+   `D:\Project\re-lab\monitor\monitor.log`. Chết thì chạy lại:
+   `python scripts/re_monitor.py` (background). Dừng = tạo file
+   `scripts/re_monitor.stop`.
+2. **Nhặt việc tiếp theo từ backlog** (mục dưới) và làm ngay — xong việc này
+   chọn việc kế tiếp, không idle.
+3. Mọi thay đổi **commit + push ngay** (`feat:`/`fix:`/`chore:`/`docs:`).
+
+### Vùng tự do
+
+- `D:\Project\re-lab\` (ngoài repo — Mimosa quét cả ignored paths nên mọi
+  clone/APK/decompile phải nằm ở đây): clone, APK samples, output, toolchain,
+  venv, hooks. Xem chi tiết trong `docs/re/2026-11-05-duckduckgo-recon.md`.
+- UnCrackable L1/L2 đã được **cài bản patched** lên máy — giữ nguyên, đó là
+  sản phẩm của vòng lặp.
+
+### Đã hoàn thành (đừng làm lại)
+
+- Toolchain RE: jadx 1.5.6, apktool 3.0.3, uber-apk-signer, Ghidra 12.2 headless
+  (JDK 25 zip), frida-tools venv, Ollama + mobilerun + Portal 0.7.28.
+- UnCrackable **L1** ✅ ("I want to believe") và **L2** ✅ ("Thanks for all the
+  fish") — writeup tại `docs/re/2026-11-05-uncrackable-l1.md` và
+  `...-l2.md`.
+- Chốt luận: **Frida no-root chết trên máy này** (gadget bị SELinux chặn socket;
+  frida-server shell-UID không attach được chéo UID). Cách động thay thế:
+  smali instrumentation / native NOP patch.
+
+### Backlog vòng tiếp theo (nhặt từ trên xuống)
+
+1. **UnCrackable Level 3** — chạy trên **emulator** (AVD trong plugin
+   android-emulator, hoặc Genymotion) vì cần Frida; máy thật không chạy được.
+2. **Patch-pipeline 1 lệnh**: gom apktool d → smali/native patch → apktool b →
+   uber-apk-signer → cài thành `scripts/repkg.py` (dùng lại các bước trong
+   `re-lab/hooks/smali_proof.py` + `l2_proof.py`).
+3. **Instrument DuckDuckGo** theo kiểu SMALIHOOK: log flow `RealAutofillService`.
+4. **Agent vision**: thử lại task app-drawer với model lớn hơn (qwen2.5vl:14b
+   nếu VRAM đủ, hoặc đổi agent prompt) — đã thất bại 3 lần với 7B, xem
+   `docs/re/mobilerun-quickstart.md`.
+
+### Ranh giới (không đổi)
+
+Giống mục 4: không flash ROM/MTKClient, không debloat/purge mà không báo user,
+không cài app lạ ngoài các app của 2 repo được chỉ định, máy là target phụ.
