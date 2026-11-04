@@ -136,7 +136,9 @@ def main() -> int:
     ap.add_argument("--patch", help="patch.json (schema xem docstring)", default=None)
     ap.add_argument("--install", action="store_true", help="cài lên thiết bị sau khi ký")
     ap.add_argument("--auto-move", action="store_true",
-                    help="build fail 65536: tự move class-group sang dex mới rồi build lại (max 3 lần)")
+                    help="build fail 65536: tự move class-group sang dex mới rồi build lại (max 3 lần). "
+                         "Hiệu quả khi class lỗi owns nhiều refs (DI chain kiểu NetworkModule); "
+                         "trường hợp degenerate (1 class tự giữ toàn bộ pool) sẽ fail loud sau retry.")
     ap.add_argument("--launch", action="store_true", help="mở app sau khi cài (monkey LAUNCHER)")
     ap.add_argument("--serial", help="adb -s <serial>", default=None)
     args = ap.parse_args()
