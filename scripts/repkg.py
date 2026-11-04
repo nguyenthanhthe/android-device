@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -95,11 +96,47 @@ def read_pkg(decode_dir: Path) -> str:
     return ""
 
 
+def parse_overflow_class(build_output: str) -> str | None:
+    """Trả về FQN của class gây lỗi 65536 từ log apktool, hoặc None."""
+    m = re.search(
+        r"writing code_item for method L([^;]+);->",
+        build_output,
+    )
+    return m.group(1).replace("/", ".") if m else None
+
+
+def move_class_group(decode_dir: Path, class_fqn: str) -> str | None:
+    """Move Bar.smali + Bar$*.smali + Bar$$*.smali sang smali_classesN mới
+    (N = max hiện có + 1). Trả về tên folder đích, hoặc None nếu không thấy."""
+    rel = class_fqn.replace(".", "/") + ".smali"
+    src_dir = None
+    for folder in sorted(decode_dir.glob("smali_classes*")) + [decode_dir / "smali"]:
+        if (folder / rel).exists():
+            src_dir = folder
+            break
+    if src_dir is None:
+        return None
+    nums = [int(m.group(1)) for f in decode_dir.glob("smali_classes*")
+            if (m := re.fullmatch(r"smali_classes(\d+)", f.name))]
+    target = decode_dir / f"smali_classes{max(nums, default=1) + 1}"
+    pkg_dir = src_dir / class_fqn.replace(".", "/").rsplit("/", 1)[0]
+    dst_pkg_dir = target / pkg_dir.relative_to(src_dir)
+    dst_pkg_dir.mkdir(parents=True, exist_ok=True)
+    stem = class_fqn.rsplit(".", 1)[-1]
+    count = 0
+    for f in pkg_dir.glob(f"{stem}*.smali"):
+        f.replace(dst_pkg_dir / f.name)
+        count += 1
+    return f"{target.name} ({count} file)" if count else None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("apk", help="APK đầu vào")
     ap.add_argument("--patch", help="patch.json (schema xem docstring)", default=None)
     ap.add_argument("--install", action="store_true", help="cài lên thiết bị sau khi ký")
+    ap.add_argument("--auto-move", action="store_true",
+                    help="build fail 65536: tự move class-group sang dex mới rồi build lại (max 3 lần)")
     ap.add_argument("--launch", action="store_true", help="mở app sau khi cài (monkey LAUNCHER)")
     ap.add_argument("--serial", help="adb -s <serial>", default=None)
     args = ap.parse_args()
@@ -119,7 +156,21 @@ def main() -> int:
         apply_patch(decode_dir, json.loads(Path(args.patch).read_text(encoding="utf-8")))
 
     unsigned = OUT_ROOT / f"{name}-repkg-unsigned.apk"
-    rc, out = java_jar(APKTOOL, "b", str(decode_dir), "-o", str(unsigned))
+    max_move_retries = 3 if args.auto_move else 0
+    for attempt in range(1 + max_move_retries):
+        rc, out = java_jar(APKTOOL, "b", str(decode_dir), "-o", str(unsigned))
+        if rc == 0:
+            break
+        if attempt < max_move_retries:
+            cls = parse_overflow_class(out)
+            if not cls:
+                break  # lỗi khác 65536 — không auto-move được
+            moved = move_class_group(decode_dir, cls)
+            if not moved:
+                sys.exit(f"repkg: không tìm thấy smali của '{cls}' để move")
+            print(f"      auto-move: {cls} -> {moved}")
+        else:
+            sys.exit(f"repkg: build vẫn fail sau {max_move_retries} lần auto-move")
     step("apktool build", rc, out, tail=1)
 
     rc, out = java_jar(SIGNER, "-a", str(unsigned), "-o", str(OUT_ROOT))
@@ -134,7 +185,7 @@ def main() -> int:
 
     pkg = read_pkg(decode_dir)
     if args.serial:
-        adb("uninstall", pkg)
+        adb("-s", args.serial, "uninstall", pkg)
         rc, out = adb("-s", args.serial, "install", str(signed))
     else:
         adb("uninstall", pkg)
