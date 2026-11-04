@@ -25,8 +25,10 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # Default connection settings
 DEVICE_SERIAL = "R9PT609NVNT"
-DEFAULT_WIFI_IPS = ["192.168.1.26:5555", "192.168.1.20:5555", "192.168.1.188:5555"]
-DEFAULT_WIFI_IP = "192.168.1.26:5555"
+# The DHCP address of the phone changes with every new lease, so it is
+# never hardcoded here.  It is discovered at run time through mDNS and
+# a scan of the local subnet (see ``discover_endpoints``).
+DEFAULT_WIFI_IP = "192.168.1.63:5555"
 DEFAULT_TAILSCALE_IP = "100.100.241.85:5555"
 SCREENSHOT_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -121,10 +123,13 @@ def get_connected_device():
             
     if not devices:
         return None
-        
-    # Prefer exact match or wireless IP
+
+    # Prefer the USB serial, then the wireless addresses.
     for dev in devices:
-        if DEVICE_SERIAL in dev or DEFAULT_WIFI_IP in dev or DEFAULT_TAILSCALE_IP in dev:
+        if DEVICE_SERIAL in dev:
+            return dev
+    for dev in devices:
+        if ":" in dev:
             return dev
     return devices[0]
 
@@ -139,31 +144,179 @@ def is_port_open(host, port=5555, timeout=0.8):
         return False
 
 
+# ----------------------------------------------------------------------
+# Finding the phone on the network
+#
+# The address of the phone comes from the router and changes with every
+# new lease, so it is looked up instead of written down.  Two sources
+# are used, in this order:
+#
+#   1. mDNS - the phone announces itself as "_adb._tcp" (plain port 5555)
+#      and as "_adb-tls-connect._tcp" (the Android 11+ wireless
+#      debugging port).  This is the reliable one.
+#   2. A scan of the local subnet for the open ADB port, used only when
+#      mDNS says nothing.
+#
+# The mesh address of the phone is always tried as the last resort, so
+# the bridge keeps working when the phone is out of the house.
+# ----------------------------------------------------------------------
+def valid_endpoint(address):
+    """Accept only a plain ``ipv4:port`` pair.
+
+    The address comes from the network, so it is checked before it is
+    handed to adb.  A name is not accepted - only a literal address.
+    """
+    host, _, port = address.rpartition(":")
+    if not host or not port.isdigit():
+        return False
+    if not 1 <= int(port) <= 65535:
+        return False
+    parts = host.split(".")
+    if len(parts) != 4:
+        return False
+    for part in parts:
+        if not part.isdigit() or not 0 <= int(part) <= 255:
+            return False
+    return True
+
+
+def mdns_endpoints():
+    """Ask the ADB server which addresses the phone announced.
+
+    ``adb mdns services`` prints one line per service with the name,
+    the service type and the ``host:port``.  Only the services of our
+    own device are kept.
+    """
+    out, _, _ = run_cmd([ADB_PATH, "mdns", "services"], timeout=12)
+    found = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        name, service, address = parts[0], parts[1], parts[2]
+        if DEVICE_SERIAL not in name:
+            continue
+        if service not in ("_adb._tcp", "_adb-tls-connect._tcp"):
+            continue
+        if not valid_endpoint(address):
+            continue
+        if address not in found:
+            found.append(address)
+    return found
+
+
+def scan_subnet():
+    """Look for an open ADB port in the local subnet.
+
+    Only the /24 of the local network is scanned, and only the ADB
+    port.  This is the fallback for when mDNS is blocked.
+    """
+    import socket
+    from concurrent.futures import ThreadPoolExecutor
+
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        local_ip = probe.getsockname()[0]
+        probe.close()
+    except OSError:
+        return []
+
+    prefix = local_ip.rsplit(".", 1)[0]
+
+    def probe_host(host):
+        return host if is_port_open(host, 5555, timeout=0.4) else None
+
+    hits = []
+    with ThreadPoolExecutor(max_workers=64) as pool:
+        for host in pool.map(probe_host, [f"{prefix}.{i}" for i in range(1, 255)]):
+            if host:
+                hits.append(f"{host}:5555")
+    return hits
+
+
+def discover_endpoints():
+    """Collect every address the phone might answer on.
+
+    The result is ordered by how likely it is to work: what the phone
+    announces right now, the addresses found by scanning and finally
+    the mesh address.
+    """
+    found = list(mdns_endpoints())
+
+    # The subnet scan is slow, so it only runs when mDNS said nothing.
+    if not found:
+        for address in scan_subnet():
+            if address not in found:
+                found.append(address)
+
+    if DEFAULT_TAILSCALE_IP not in found:
+        found.append(DEFAULT_TAILSCALE_IP)
+
+    return found
+
+
 def ensure_device(auto_connect=True):
     """Ensure device is attached, or attempt quick reconnect."""
     dev = get_connected_device()
     if dev:
         return dev
-        
+
     if not auto_connect:
         return None
-        
-    # Check Wi-Fi ports first
-    for wifi_target in DEFAULT_WIFI_IPS:
-        wifi_host, wifi_port = wifi_target.split(":")
-        if is_port_open(wifi_host, wifi_port):
-            run_cmd([ADB_PATH, "connect", wifi_target], timeout=5)
-            dev = get_connected_device()
-            if dev:
-                return dev
 
-    # Check Tailscale mesh port
-    ts_host, ts_port = DEFAULT_TAILSCALE_IP.split(":")
-    if is_port_open(ts_host, ts_port):
-        run_cmd([ADB_PATH, "connect", DEFAULT_TAILSCALE_IP], timeout=5)
-        return get_connected_device()
-        
+    for address in discover_endpoints():
+        host, _, port = address.rpartition(":")
+        if not is_port_open(host, int(port)):
+            continue
+        run_cmd([ADB_PATH, "connect", address], timeout=8)
+        dev = get_connected_device()
+        if dev:
+            return dev
+
     return get_connected_device()
+
+
+def cmd_wireless():
+    """Turn on and report the wireless ADB connection of the phone.
+
+    The phone listens on the network already; this command finds it,
+    connects to it and prints where it can be reached.
+    """
+    # The TCP mode is what makes the phone listen on the network.  It
+    # is set through the USB link, so that has to be up first.
+    usb = get_connected_device()
+    if usb and ":" not in usb:
+        print(f"[*] Turning on the TCP mode of the phone over {usb}...")
+        run_cmd([ADB_PATH, "-s", usb, "tcpip", "5555"], timeout=15)
+        time.sleep(2)
+
+    addresses = discover_endpoints()
+    print(f"[*] Addresses found: {', '.join(addresses) if addresses else 'none'}")
+
+    connected = []
+    for address in addresses:
+        host, _, port = address.rpartition(":")
+        if not is_port_open(host, int(port)):
+            continue
+        run_cmd([ADB_PATH, "connect", address], timeout=8)
+        if get_connected_device():
+            connected.append(address)
+
+    devices = [
+        line.strip()
+        for line in run_cmd([ADB_PATH, "devices"], timeout=5)[0].splitlines()[1:]
+        if line.strip()
+    ]
+    result = {
+        "wireless_enabled": bool(connected),
+        "addresses_found": addresses,
+        "addresses_connected": connected,
+        "tailscale": DEFAULT_TAILSCALE_IP,
+        "devices": devices,
+    }
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return result
 
 
 def adb_exec(args, timeout=10, binary=False):
@@ -611,6 +764,7 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
     
     subparsers.add_parser("status", help="Get lightweight JSON hardware/battery/RAM/IP status")
+    subparsers.add_parser("wireless", help="Enable and report the wireless ADB link to the phone")
     subparsers.add_parser("ui-tree", help="Dump and filter UI tree to JSON with center tap coordinates")
     subparsers.add_parser("persist-setup", help="Apply persistence & disable Phantom Process Killer")
     subparsers.add_parser("root-check", help="Check su / root access")
@@ -644,6 +798,8 @@ def main():
     
     if args.command == "status":
         cmd_status()
+    elif args.command == "wireless":
+        cmd_wireless()
     elif args.command == "ui-tree":
         cmd_ui_tree()
     elif args.command == "persist-setup":

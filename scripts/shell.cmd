@@ -1,10 +1,9 @@
 @echo off
 setlocal
-set ADB="%~dp0..\tools\platform-tools\adb.exe"
+cd /d "%~dp0.."
 
 echo [*] Opening ADB Shell on Samsung Galaxy A03s...
-%ADB% -s 192.168.1.188:5555 shell
-if %ERRORLEVEL% NEQ 0 (
-    echo [!] Wireless shell failed. Trying USB fallback...
-    %ADB% shell
-)
+REM The address of the phone is looked up at run time, so it is not
+REM written down here.  The shell opens on whatever link is found.
+python "%~dp0..\a03s-ctl.py" wireless >nul
+adb shell

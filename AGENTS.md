@@ -45,6 +45,7 @@ Lưu ý: nhiều file cấu hình Termux X11 nằm **ngay ở repo root** (`.des
 | Lệnh | Chức năng | Ghi chú output |
 | :--- | :--- | :--- |
 | `status` | Pin %, nhiệt độ, RAM trống, IP Wi-Fi/Tailscale, cửa sổ focus | JSON gọn — dùng để lấy IP hiện tại |
+| `wireless` | Bật TCP mode + tự tìm IP của máy, kết nối và báo cáo địa chỉ | JSON — dùng khi IP DHCP đổi |
 | `ui-tree` | Dump UI tree dạng JSON kèm tọa độ `center [x, y]` | **Luôn dùng thay OCR/screenshot** khi cần tap |
 | `tap <x> <y>` | `input tap` | Lấy tọa độ từ `ui-tree`, không đoán |
 | `swipe <x1> <y1> <x2> <y2> [ms]` | Vuốt | |
@@ -58,11 +59,22 @@ Lưu ý: nhiều file cấu hình Termux X11 nằm **ngay ở repo root** (`.des
 | `minipc` / `stop-minipc` | Bật/tắt desktop X11 (Termux:X11 + Openbox + Tint2 + Arch terminal) | `stop-minipc` phải trả lại RAM cho One UI |
 
 ### Kết nối
+
+IP Wi-Fi của máy là **DHCP và đổi theo lease** — đừng hardcode. `a03s-ctl` tự tìm theo thứ tự:
+
+1. **mDNS** — máy tự quảng bá `_adb._tcp` (port 5555) và `_adb-tls-connect._tcp` (port ngẫu nhiên của Wireless debugging, đổi mỗi lần boot)
+2. **Quét /24 nội bộ** — dự phòng khi mDNS bị chặn
+3. **Tailscale** — `100.100.241.85:5555`, dùng khi không ở mạng nhà
+
 ```powershell
-adb connect 192.168.1.26:5555     # IP hiện tại, xác nhận bằng `a03s-ctl status`
-adb connect 100.100.241.85:5555  # Tailscale
+.\a03s-ctl.cmd wireless          # tự tìm + kết nối, in JSON
+adb connect 100.100.241.85:5555   # Tailscale (địa chỉ cố định)
 .\connect.cmd  |  .\connect-tailscale.cmd  |  .\mirror.cmd
 ```
+
+> Máy **không có root** → `persist.adb.tcp.port` không set được, nên port 5555 mất sau mỗi lần reboot.
+> Bật lại bằng `a03s-ctl wireless` (cần USB đang cắm để chạy `adb tcpip 5555`), hoặc dùng
+> Wireless debugging (TLS port) vốn tự bật lại sau reboot và đã được mDNS quảng bá.
 
 ### Tool path (khi `adb` không có trong PATH)
 - ADB: `tools\platform-tools\adb.exe`

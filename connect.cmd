@@ -1,11 +1,20 @@
 @echo off
-set ADB="C:\Users\Admin\AppData\Local\Microsoft\WinGet\Packages\Google.PlatformTools_Microsoft.Winget.Source_8wekyb3d8bbwe\platform-tools\adb.exe"
-echo [*] Connecting to Samsung Galaxy A03s...
-echo [*] Trying Local Wi-Fi (192.168.1.188:5555)...
-%ADB% connect 192.168.1.188:5555
-echo [*] Trying Tailscale Mesh (100.100.241.85:5555)...
-%ADB% connect 100.100.241.85:5555
+REM Connect to the Samsung Galaxy A03s over wireless ADB.
+REM The address of the phone changes with every DHCP lease, so it is
+REM looked up at run time (mDNS first, then a scan of the subnet)
+REM instead of being written down here.
+setlocal
+cd /d "%~dp0"
+
+echo [*] Connecting to Samsung Galaxy A03s over wireless ADB...
+python "%~dp0a03s-ctl.py" wireless
+if errorlevel 1 (
+    echo [!] The wireless bridge could not be opened.
+    pause
+    exit /b 1
+)
+
 echo.
 echo [*] Connected devices:
-%ADB% devices -l
+adb devices -l
 pause

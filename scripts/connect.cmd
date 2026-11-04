@@ -1,16 +1,23 @@
 @echo off
 setlocal
-set ADB="%~dp0..\tools\platform-tools\adb.exe"
+cd /d "%~dp0.."
 
 echo ========================================================
 echo   Android Device Bridge - Wireless Connector
-echo   Target: Samsung Galaxy A03s (192.168.1.188:5555)
+echo   Target: Samsung Galaxy A03s (SM-A037F)
+echo   The address is looked up at run time, not hardcoded.
 echo ========================================================
 echo.
-echo [*] Checking connection to 192.168.1.188:5555...
-%ADB% connect 192.168.1.188:5555
+
+python "%~dp0..\a03s-ctl.py" wireless
+if errorlevel 1 (
+    echo [!] The wireless bridge could not be opened.
+    pause
+    exit /b 1
+)
+
 echo.
 echo [*] Connected Devices List:
-%ADB% devices -l
+adb devices -l
 echo.
 pause

@@ -1,8 +1,13 @@
 @echo off
-set ADB="C:\Users\Admin\AppData\Local\Microsoft\WinGet\Packages\Google.PlatformTools_Microsoft.Winget.Source_8wekyb3d8bbwe\platform-tools\adb.exe"
+setlocal
+cd /d "%~dp0"
+
 echo [*] Checking connection to Samsung Galaxy A03s...
-%ADB% connect 192.168.1.188:5555 >nul 2>&1
-%ADB% connect 100.100.241.85:5555 >nul 2>&1
+REM The address of the phone changes with every DHCP lease, so it is
+REM looked up at run time instead of being written down here.
+python "%~dp0a03s-ctl.py" wireless >nul
 
 echo [*] Launching scrcpy wireless display mirroring...
-scrcpy -s 100.100.241.85:5555 --stay-awake --turn-screen-off --power-off-on-close || scrcpy -s 192.168.1.188:5555 --stay-awake --turn-screen-off --power-off-on-close
+REM The serial is used for the pick, so the mirror works over USB and
+REM over the network alike.
+scrcpy -s R9PT609NVNT --stay-awake --turn-screen-off --power-off-on-close
