@@ -11,7 +11,7 @@ D:\Project\android-device\
 ├── tools\
 │   ├── platform-tools\       # Bộ công cụ ADB và Fastboot chính hãng từ Google
 │   ├── scrcpy\               # Công cụ điều khiển và stream màn hình 60fps qua máy tính
-│   └── mtkclient\            # Bộ công cụ BootROM MediaTek MT6765 (BROM exploit)
+│   └── mtkclient\            # → đã chuyển sang D:\Tools\mtkclient (Bộ công cụ BootROM MediaTek MT6765, BROM exploit)
 ├── skills\
 │   ├── android-dev\          # Kỹ năng ZCode Android Dev (build, run, UI Automator)
 │   └── android-device-hub\   # Kỹ năng Antigravity điều khiển vật lý Samsung A03s

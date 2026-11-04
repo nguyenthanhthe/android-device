@@ -1,89 +1,109 @@
 # Android Device Bridge & Automation Workspace
 
-## Target Device Specifications
-- **Model:** Samsung Galaxy A03s (`SM-A037F` / `a03snnxx`)
-- **Serial Number:** `R9PT609NVNT`
-- **Chipset:** MediaTek Helio P35 (`MT6765`, 8x ARM Cortex-A53)
-- **OS Version:** Android 13, One UI Core 5.1 (Build `A037FXXS7CXK1`)
-- **Local Wi-Fi IP:** `192.168.1.188` (Port: `5555`)
-- **Tailscale Global IP:** `100.100.241.85` (Port: `5555`, node: `a03s`)
-- **Role:** Dedicated Secondary Android Dev & Agent Automation Target (Headless bot, UI Automator, scrcpy mirroring, Termux Linux node, robot controller).
+Hub quản lý, kết nối và tự động hóa cho điện thoại **Samsung Galaxy A03s (`SM-A037F`)** phục vụ Coding Agents, UI testing, robot bridge và Linux mini-PC trên Termux.
+
+Workspace: `D:\Project\android-device` (Windows, Git Bash / PowerShell / CMD đều dùng được).
 
 ---
 
-## Connection & Operational Modes
+## 1. Target Device Profile
 
-### 1. Wireless ADB Connection
-- **Local Wi-Fi (Home):**
-```powershell
-adb connect 192.168.1.188:5555
-```
-- **Remote / Any Network (Tailscale Mesh):**
-```powershell
-adb connect 100.100.241.85:5555
-```
-Or run the workspace scripts: `.\connect.cmd` or `.\connect-tailscale.cmd`.
-
-### 2. High-Performance Screen Mirroring (Scrcpy)
-To stream the phone display to a low-latency 60fps Windows window and control with mouse/keyboard:
-```powershell
-scrcpy -s 100.100.241.85:5555
-```
-Or simply run:
-```powershell
-.\mirror.cmd
-```
-
-### 3. Safe Debloating & Optimization
-To remove invasive background bloatware (Facebook Services, Microsoft apps, Samsung GOS performance throttling) and free up ~1GB RAM:
-```powershell
-.\debloat.ps1
-```
+- **Model:** Samsung Galaxy A03s (`SM-A037F` / `a03snnxx`), **Serial:** `R9PT609NVNT`
+- **Chipset:** MediaTek Helio P35 (`MT6765`, 8x ARM Cortex-A53) — có thể flash ROM qua MTKClient BROM
+- **OS:** Android 13, One UI Core 5.1 (Build `A037FXXS7CXK1`)
+- **Wi-Fi IP (DHCP, có thể đổi):** `192.168.1.26` (các IP cũ: `192.168.1.20`, `192.168.1.188`) — luôn kiểm tra lại bằng `status` thay vì hardcode
+- **Tailscale:** `100.100.241.85:5555` (node `a03s`) — dùng khi không ở mạng nhà
+- **Role:** target phụ cho headless automation, UI Automator, scrcpy mirroring, Termux Linux node
 
 ---
 
-## Agent Automation Guidelines
-When interacting with this device via Coding Agents:
-- Prefer `./a03s-ctl <subcommand>` (or `python a03s-ctl.py <subcommand>` / `.\a03s-ctl.cmd`) for all phone interactions.
-- For UI Automation without token cost: ALWAYS run `./a03s-ctl ui-tree` to inspect interactive elements and retrieve exact `[center_x, center_y]` coordinates for `./a03s-ctl tap <x> <y>`.
-- For background services, utilize Termux or native Android background daemons.
+## 2. Cấu trúc thư mục
+
+```
+a03s-ctl.py / a03s-ctl{,.cmd,.ps1,.sh}   # CLI điều khiển chính (Python, không phụ thuộc ngoài)
+connect.cmd, connect-tailscale.cmd, mirror.cmd   # wrapper 1-click ở root
+debloat.ps1, purge-samsung-services.ps1, de-google-and-hacker-setup.ps1   # gỡ app rác
+start_minipc.sh, stop_minipc_script, launch_*.sh, *.desktop, tint2rc, rc.xml   # cấu hình Termux X11 mini-PC
+tools/platform-tools/  # adb + fastboot (git-ignored, tải về khi cần)
+tools/scrcpy/           # screen mirroring 60fps (git-ignored)
+tools/mtkclient/        # MediaTek BROM flashing (git-ignored)
+scripts/                # bản sao script 1-click (connect/mirror/shell/screenshot/debloat)
+skills/android-dev/     # SKILL.md + INSTALL_ENVIRONMENT.md — build/run/UI Automator
+skills/android-device-hub/  # SKILL.md — điều khiển vật lý, wireless ADB, debloat
+screenshots/            # ảnh chụp màn hình (git-ignored)
+.acp/config.json, .idea/acp.xml   # Agent Client Protocol (stdio/JSON-RPC) với Android Studio
+```
+
+Lưu ý: nhiều file cấu hình Termux X11 nằm **ngay ở repo root** (`.desktop`, `tint2rc`, `rc.xml`, `bashrc`, `terminalrc`, `yaru_themerc`) — chúng được `adb push` lên máy, không phải file rác.
 
 ---
 
-## Galaxy A03s Intelligent Control CLI (`a03s-ctl`)
+## 3. Lệnh chuẩn (dùng `a03s-ctl` cho mọi tương tác với máy)
 
-Bộ công cụ cầu nối tự động hóa độc quyền cho Antigravity Agent tại `D:\Project\android-device`:
+`a03s-ctl` là wrapper mỏng quanh `a03s-ctl.py` (Python 3.14, chạy bằng `python` trên PATH). Dùng `./a03s-ctl <cmd>` (Git Bash), `.\a03s-ctl.cmd` (CMD/PowerShell).
 
-| Lệnh | Chức năng | Đầu ra / Mục đích tối ưu Token |
+| Lệnh | Chức năng | Ghi chú output |
 | :--- | :--- | :--- |
-| `./a03s-ctl status` | Trích xuất thông số phần cứng | JSON gọn: Pin %, nhiệt độ °C, RAM trống, IP Wi-Fi, IP Tailscale, window đang focus. |
-| `./a03s-ctl ui-tree` | Đọc toàn bộ màn hình | JSON chứa danh sách phần tử tương tác (`text`, `desc`, `id`, `bounds`, tọa độ tâm `[x, y]`). Đọc hiểu màn hình với chi phí token tối thiểu, không cần OCR/chụp ảnh. |
-| `./a03s-ctl tap <x> <y>` | Chạm vào tọa độ | Thực thi `input tap x y` chính xác theo tọa độ `center` từ `ui-tree`. |
-| `./a03s-ctl swipe <x1> <y1> <x2> <y2>` | Vuốt màn hình | Thực thi thao tác cuộn/vuốt màn hình. |
-| `./a03s-ctl text "<chuỗi>"` | Nhập văn bản | Nhập liệu nhanh (tự động escape ký tự đặc biệt và dấu cách). |
-| `./a03s-ctl key <keycode>` | Phím vật lý | Gửi keycode (ví dụ: `4` = Back, `3` = Home, `26` = Nguồn). |
-| `./a03s-ctl screen-mirror` | Mirror màn hình | Khởi chạy `scrcpy` ngầm (tắt màn hình vật lý điện thoại để bảo vệ pin và chống nóng máy). |
-| `./a03s-ctl screenshot` | Chụp ảnh màn hình | Lưu ảnh chụp nén nhẹ về `screenshots/a03s_screen.png`. |
-| `./a03s-ctl persist-setup` | Gia cố kết nối & Chạy ngầm | Tắt thời gian chờ tự hủy ADB, giữ máy luôn thức khi cắm sạc, tắt Phantom Process Killer. |
-| `./a03s-ctl root-check` | Kiểm tra Root | Kiểm tra quyền `su` trên máy. |
-| `./a03s-ctl pkg-check` | Kiểm tra gói cài đặt | Kiểm tra trạng thái của `com.termux`, `com.termux.api`, `moe.shizuku.privileged.api`. |
-| `./a03s-ctl install-tools` | Cài đặt công cụ tự động | Tự động tải từ GitHub chính thức và chạy `adb install` các công cụ Termux & Shizuku. |
+| `status` | Pin %, nhiệt độ, RAM trống, IP Wi-Fi/Tailscale, cửa sổ focus | JSON gọn — dùng để lấy IP hiện tại |
+| `ui-tree` | Dump UI tree dạng JSON kèm tọa độ `center [x, y]` | **Luôn dùng thay OCR/screenshot** khi cần tap |
+| `tap <x> <y>` | `input tap` | Lấy tọa độ từ `ui-tree`, không đoán |
+| `swipe <x1> <y1> <x2> <y2> [ms]` | Vuốt | |
+| `text "<chuỗi>"` | Nhập text (tự escape space/ký tự đặc biệt) | |
+| `key <keycode>` | keyevent (`4`=Back, `3`=Home, `26`=Power) | |
+| `screenshot [path]` | Chụp ảnh → `screenshots/a03s_screen.png` | |
+| `screen-mirror` | Chạy scrcpy nền, tắt màn hình máy để tiết kiệm pin | |
+| `persist-setup` | Tắt ADB timeout, giữ máy thức khi sạc, tắt Phantom Process Killer | Chạy 1 lần sau mỗi reboot |
+| `root-check` / `pkg-check` | Kiểm tra `su` / trạng thái Termux, Termux:API, Shizuku | |
+| `install-tools` | Tải & `adb install` Termux, Termux:API, Shizuku | Cần mạng |
+| `minipc` / `stop-minipc` | Bật/tắt desktop X11 (Termux:X11 + Openbox + Tint2 + Arch terminal) | `stop-minipc` phải trả lại RAM cho One UI |
+
+### Kết nối
+```powershell
+adb connect 192.168.1.26:5555     # IP hiện tại, xác nhận bằng `a03s-ctl status`
+adb connect 100.100.241.85:5555  # Tailscale
+.\connect.cmd  |  .\connect-tailscale.cmd  |  .\mirror.cmd
+```
+
+### Tool path (khi `adb` không có trong PATH)
+- ADB: `tools\platform-tools\adb.exe`
+- Scrcpy: `tools\scrcpy\scrcpy.exe`
+- `adb` cũng có sẵn qua winget; `a03s-ctl.py` gọi `adb` theo tên (`ADB_PATH = "adb"`), nên **cần `adb` trong PATH** khi chạy CLI.
 
 ---
 
-## Android Studio & ACP Workflow Standards (Token & UI Velocity Optimization)
+## 4. Quy chuẩn cho Agent
 
-### 1. ACP (Agent Client Protocol) Architecture
-- **Protocol:** Connected via stdio/JSON-RPC specification configured in `.acp/config.json` and `.idea/acp.xml`.
-- **Permissions:**
-  - Context Reading: Direct access to Android Studio project index, symbol trees, and syntax hierarchies.
-  - Command Execution: Whitelisted for `android preview`, `android studio`, `./gradlew`, `gradlew.bat`, and `adb`.
-  - File Editing: Surgical diff-based edits with automatic workspace synchronization.
+- **Không OCR / không đoán tọa độ.** Mọi thao tác chạm phải lấy từ `a03s-ctl ui-tree` → `tap <center_x> <center_y>`.
+- **Ưu tiên CLI hơn adb thô** khi tác vụ đã có subcommand; chỉ gọi `adb shell` trực tiếp cho thao tác mới.
+- **Không chạy `install-tools` / `debloat.ps1` / `purge-samsung-services.ps1` mà không báo người dùng** — các script này xóa app hoặc thay đổi hệ thống.
+- **Không flash ROM / không dùng MTKClient BROM** trừ khi được yêu cầu tường minh; thao tác này có thể brick máy.
+- **`a03s-ctl.py` là một file duy nhất** — mọi thay đổi CLI phải nằm trong file đó và cập nhật cả bảng lệnh trong AGENTS.md.
+- Máy là **target phụ**: tránh cài app lạ, tránh tắt app hệ thống khi không có yêu cầu.
 
-### 2. Quy chuẩn Vận hành Tối ưu Token
-- **Nguyên tắc Đọc Context:** Tuyệt đối không đọc tràn lan toàn bộ kho mã nguồn. Chỉ truy vấn các file/ký hiệu liên quan trực tiếp đến tính năng hoặc màn hình đang xử lý thông qua index/symbol search của IDE hoặc `android studio find-declaration` / `find-usages`.
-- **Nguyên tắc Làm UI với `android preview`:** Khi tạo mới hoặc chỉnh sửa giao diện (Jetpack Compose `@Preview` hoặc XML Layout), bắt buộc gọi lệnh `android preview` (hoặc sidecar preview) để kiểm tra kết quả hiển thị và phát hiện lỗi biên dịch cục bộ; **nghiêm cấm chạy full `./gradlew assembleDebug`** chỉ để xem UI.
-  - Lệnh preview độc lập: `android preview render --daemon --component-tree <reference> --fqn <target_preview>`
-  - Lệnh preview qua Studio: `android studio render-compose-preview <file_path> <composable>`
-- **Nguyên tắc Sửa File:** Sửa đổi theo từng khối (diff/patch) nhỏ gọn theo nguyên tắc Ponytail, kiểm tra ngay kết quả chẩn đoán qua IDE diagnostic / `android studio analyze-file <path>` sau khi sửa.
+---
 
+## 5. ACP / Android Studio Workflow
+
+- Kết nối Agent Client Protocol qua stdio/JSON-RPC: `.acp/config.json` (client: Android Studio, agent: `antigravity --acp --stdio`).
+- Whitelist lệnh được phép: `android preview *`, `android studio *`, `android *`, `./gradlew *`, `gradlew.bat *`, `adb *`.
+- **Không đọc tràn lan repo.** Dùng index/symbol search của IDE: `android studio find-declaration`, `find-usages`, `android studio analyze-file <path>`.
+- **Để xem UI, dùng `android preview`**, tuyệt đối không chạy full `./gradlew assembleDebug` chỉ để xem giao diện.
+  - `android preview render --daemon --component-tree <reference> --fqn <target_preview>`
+  - `android studio render-compose-preview <file_path> <composable>`
+- Sửa file theo khối nhỏ (diff/patch), kiểm tra diagnostic ngay sau khi sửa.
+
+---
+
+## 6. Tài liệu phải đọc trước khi thay đổi
+
+- `skills/android-dev/SKILL.md` + `INSTALL_ENVIRONMENT.md` — build/run app, UI Automator, setup môi trường.
+- `skills/android-device-hub/SKILL.md` — điều khiển vật lý, wireless ADB, debloat, mirroring.
+- `README.md` — hướng dẫn dùng nhanh bằng giao diện (tiếng Việt).
+
+---
+
+## 7. Vệ sinh repo
+
+- `.gitignore` đã loại `tools/platform-tools`, `tools/scrcpy`, `tools/mtkclient`, `tools/apks/*.apk`, `screenshots/*.png`, `__pycache__`.
+- **Không commit** các artifact tạm (`search.html`, `*.png` sinh ra lúc test, `test_screen.png`, `duckduckgo.apk` lớn) trừ khi thực sự cần.
+- Commit theo từng thay đổi logic, message có tiền tố `feat:` / `fix:` / `chore:`.

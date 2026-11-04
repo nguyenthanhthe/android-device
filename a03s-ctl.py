@@ -12,7 +12,10 @@ import re
 import subprocess
 import sys
 import time
+import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 # Ensure UTF-8 output on Windows consoles
 if hasattr(sys.stdout, "reconfigure"):
@@ -22,7 +25,8 @@ if hasattr(sys.stderr, "reconfigure"):
 
 # Default connection settings
 DEVICE_SERIAL = "R9PT609NVNT"
-DEFAULT_WIFI_IP = "192.168.1.188:5555"
+DEFAULT_WIFI_IPS = ["192.168.1.26:5555", "192.168.1.20:5555", "192.168.1.188:5555"]
+DEFAULT_WIFI_IP = "192.168.1.26:5555"
 DEFAULT_TAILSCALE_IP = "100.100.241.85:5555"
 SCREENSHOT_DEFAULT = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -32,15 +36,66 @@ SCREENSHOT_DEFAULT = os.path.join(
 
 ADB_PATH = "adb"
 
+WORKSPACE = os.path.dirname(os.path.abspath(__file__))
+
+
+def safe_path(raw_path: str, base_dir: str = WORKSPACE) -> str:
+    """Resolve a path and refuse anything that escapes ``base_dir``.
+
+    Every path that comes from the command line goes through here, so a
+    relative value with parent references can never reach outside the
+    workspace.
+    """
+    from pathlib import Path
+
+    base = Path(base_dir).resolve()
+    candidate = Path(os.path.expanduser(raw_path))
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    target = candidate.resolve()
+    if target != base and base not in target.parents:
+        raise ValueError(f"path escapes {base_dir}: {raw_path}")
+    return str(target)
+
+
+def safe_xml(raw_xml: str) -> "ET.Element":
+    """Parse uiautomator output without expanding entities.
+
+    The XML comes from the device, so it is treated as untrusted: entity
+    declarations are rejected and the input size is capped.
+    """
+    import xml.parsers.expat
+
+    if len(raw_xml) > 4 * 1024 * 1024:
+        raise ValueError("XML output is too large")
+    lowered = raw_xml.lower()
+    if "<!doctype" in lowered or "<!entity" in lowered:
+        raise ValueError("XML with entity declarations is not accepted")
+
+    def _reject_entity(*_args):
+        raise ValueError("entity declarations are not accepted")
+
+    builder = ET.TreeBuilder()
+    parser = xml.parsers.expat.ParserCreate()
+    parser.EntityDeclHandler = _reject_entity
+    parser.StartElementHandler = lambda name, attrs: builder.start(name, attrs)
+    parser.EndElementHandler = lambda name: builder.end(name)
+    parser.CharacterDataHandler = builder.data
+    parser.Parse(raw_xml, True)
+    return builder.close()
+
 
 def run_cmd(cmd, timeout=10, check=False):
     """Run command and return (stdout, stderr, exit_code)."""
     try:
+        # ponytail: explicit utf-8 with replace prevents cp1252 charmap decode crashes
         res = subprocess.run(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             shell=isinstance(cmd, str),
             timeout=timeout,
         )
@@ -93,13 +148,14 @@ def ensure_device(auto_connect=True):
     if not auto_connect:
         return None
         
-    # Check Wi-Fi port first
-    wifi_host, wifi_port = DEFAULT_WIFI_IP.split(":")
-    if is_port_open(wifi_host, wifi_port):
-        run_cmd([ADB_PATH, "connect", DEFAULT_WIFI_IP], timeout=5)
-        dev = get_connected_device()
-        if dev:
-            return dev
+    # Check Wi-Fi ports first
+    for wifi_target in DEFAULT_WIFI_IPS:
+        wifi_host, wifi_port = wifi_target.split(":")
+        if is_port_open(wifi_host, wifi_port):
+            run_cmd([ADB_PATH, "connect", wifi_target], timeout=5)
+            dev = get_connected_device()
+            if dev:
+                return dev
 
     # Check Tailscale mesh port
     ts_host, ts_port = DEFAULT_TAILSCALE_IP.split(":")
@@ -252,13 +308,16 @@ def cmd_ui_tree():
         print(json.dumps({"error": "Failed to retrieve UI hierarchy XML from device", "raw": xml_data[:200]}, indent=2))
         return
         
-    # Clean possible prefix
+    # Clean possible prefix and suffix (ponytail: trim uiautomator console output after </hierarchy>)
     start_idx = xml_data.find("<hierarchy")
     if start_idx != -1:
         xml_data = xml_data[start_idx:]
+    end_idx = xml_data.rfind("</hierarchy>")
+    if end_idx != -1:
+        xml_data = xml_data[:end_idx + len("</hierarchy>")]
         
     try:
-        root = ET.fromstring(xml_data)
+        root = safe_xml(xml_data)
     except Exception as e:
         print(json.dumps({"error": f"XML parse error: {e}"}, indent=2))
         return
@@ -385,21 +444,26 @@ def cmd_screen_mirror():
 
 def cmd_screenshot(output_path=None):
     """Capture compressed lightweight screenshot."""
+    from pathlib import Path
+
     if not output_path:
         output_path = SCREENSHOT_DEFAULT
+    try:
+        output_path = safe_path(output_path)
+    except ValueError as exc:
+        print(json.dumps({"error": str(exc)}, indent=2))
+        return
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    
+
     print(f"[*] Capturing screenshot to {output_path}...")
     png_bytes, err, code = adb_exec(["exec-out", "screencap", "-p"], timeout=10, binary=True)
     if code == 0 and len(png_bytes) > 0:
         # Normalize CRLF on Windows if adb binary piped
         if png_bytes.startswith(b"\x89PNG"):
-            with open(output_path, "wb") as f:
-                f.write(png_bytes)
+            Path(output_path).write_bytes(png_bytes)
         else:
             clean_bytes = png_bytes.replace(b"\r\n", b"\n")
-            with open(output_path, "wb") as f:
-                f.write(clean_bytes)
+            Path(output_path).write_bytes(clean_bytes)
         print(f"[+] Screenshot saved ({len(png_bytes) // 1024} KB): {output_path}")
     else:
         print(f"[-] Screenshot failed: {err.decode(errors='ignore')}")
@@ -479,12 +543,21 @@ def cmd_install_tools():
     
     dev = ensure_device()
     for item in tools:
-        local_path = os.path.join(apks_dir, item["file"])
+        local_path = safe_path(item["file"], apks_dir)
         if not os.path.exists(local_path):
             print(f"[*] Downloading {item['name']} from official GitHub release...")
+            parts = urllib.parse.urlsplit(item["url"])
+            if parts.scheme != "https" or parts.hostname not in (
+                "github.com",
+                "objects.githubusercontent.com",
+                "raw.githubusercontent.com",
+            ):
+                print(json.dumps({"error": f"unexpected download host: {parts.hostname}"}))
+                continue
             req = urllib.request.Request(item["url"], headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=60) as resp, open(local_path, "wb") as f:
-                f.write(resp.read())
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                payload = resp.read()
+            Path(local_path).write_bytes(payload)
             print(f"[+] Cached: {item['file']} ({os.path.getsize(local_path) // 1024} KB)")
         else:
             print(f"[*] Cached APK found: {item['file']} ({os.path.getsize(local_path) // 1024} KB)")
@@ -500,6 +573,39 @@ def cmd_install_tools():
             print(f"[!] Device not connected: Downloaded APK is ready at {local_path} (install automatically when connected).")
 
 
+def cmd_minipc():
+    """Start Termux:X11 Mini PC desktop environment."""
+    dev = get_connected_device()
+    if not dev:
+        print("[-] Error: No Android device connected.")
+        return
+    print("[*] Launching Linux Mini PC on Galaxy A03s...")
+    cmd = [
+        ADB_PATH, "-s", dev, "shell",
+        "run-as com.termux /data/data/com.termux/files/usr/bin/bash -c 'export PATH=/data/data/com.termux/files/usr/bin:$PATH; /data/data/com.termux/files/home/start_minipc.sh'"
+    ]
+    out, err, code = run_cmd(cmd, timeout=15)
+    if out:
+        print(out)
+    run_cmd([ADB_PATH, "-s", dev, "shell", "am start -n com.termux.x11/.MainActivity"], timeout=5)
+    print("[+] Mini PC started and active on display.")
+
+
+def cmd_stop_minipc():
+    """Stop Termux:X11 Mini PC desktop environment."""
+    dev = get_connected_device()
+    if not dev:
+        print("[-] Error: No Android device connected.")
+        return
+    print("[*] Stopping Linux Mini PC...")
+    cmd = [
+        ADB_PATH, "-s", dev, "shell",
+        "run-as com.termux /data/data/com.termux/files/usr/bin/bash -c 'export PATH=/data/data/com.termux/files/usr/bin:$PATH; pkill -9 -f \"openbox|tint2|aterm|termux-x11\"'"
+    ]
+    out, err, code = run_cmd(cmd, timeout=10)
+    print("[+] Mini PC stopped. Linux desktop processes terminated.")
+
+
 def main():
     parser = argparse.ArgumentParser(description="a03s-ctl: Samsung Galaxy A03s Agent Control CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available subcommands")
@@ -511,6 +617,8 @@ def main():
     subparsers.add_parser("pkg-check", help="Check Termux & Shizuku packages")
     subparsers.add_parser("install-tools", help="Download & install Termux, Termux:API, and Shizuku APKs")
     subparsers.add_parser("screen-mirror", help="Launch scrcpy background mirror with screen off")
+    subparsers.add_parser("minipc", help="Start Linux Mini PC desktop environment on Galaxy A03s")
+    subparsers.add_parser("stop-minipc", help="Stop Linux Mini PC desktop environment")
     
     p_tap = subparsers.add_parser("tap", help="Tap on screen coordinate")
     p_tap.add_argument("x", type=int, help="X coordinate")
@@ -548,10 +656,14 @@ def main():
         cmd_install_tools()
     elif args.command == "screen-mirror":
         cmd_screen_mirror()
+    elif args.command == "minipc":
+        cmd_minipc()
+    elif args.command == "stop-minipc":
+        cmd_stop_minipc()
     elif args.command == "tap":
         cmd_tap(args.x, args.y)
     elif args.command == "swipe":
-        cmd_swipe(args.x, args.y, args.x2, args.y2, args.duration)
+        cmd_swipe(args.x1, args.y1, args.x2, args.y2, args.duration)
     elif args.command == "text":
         cmd_text(args.string)
     elif args.command == "key":

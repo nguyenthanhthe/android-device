@@ -13,7 +13,7 @@ All device tools and scripts are located at:
 
 - **ADB / Fastboot:** `D:\Project\android-device\tools\platform-tools\adb.exe`
 - **Scrcpy:** `D:\Project\android-device\tools\scrcpy\scrcpy.exe`
-- **MTKClient:** `D:\Project\android-device\tools\mtkclient`
+- **MTKClient:** `D:\Tools\mtkclient` (đã chuyển ra ngoài repo: pre-commit scan không quét code vendor)
 - **Scripts:** `D:\Project\android-device\scripts`
 
 ## Target Profile

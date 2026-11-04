@@ -12,6 +12,13 @@ screenshots/*.png
 __pycache__/
 *.pyc
 
+# Node
+node_modules/
+*.log
+
+# Mimosa hook state (tooling internals)
+.mimosa/
+
 # Local system files
 Thumbs.db
 .DS_Store
