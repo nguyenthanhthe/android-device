@@ -37,6 +37,14 @@ mobilerun run "<task tiếng Anh>" --steps 8 --no-vision   # chạy agent
 | "Go back to the home screen, then open the Clock app" | 6 | ❌ Click-loop vào "Tin nhắn" (dock cạnh Đồng hồ), cạn bước |
 | "Mở ứng dụng Đồng hồ (Clock)" | 10 | ❌ Swiping lan man trong app drawer, không chạm đúng icon |
 | "Press home, swipe down to open the notification shade, report notifications" | 5/6 | ✅ Đọc đúng shade: Serial Bluetooth Terminal, Termux:Widget, DuckDuckGo… |
+| "Open the Clock app" (qwen2.5vl:7b, --vision, 8 và 16 bước) | — | ❌❌ Agent lạc vào page indicator "Trang 1 trên 5" của home, không vào nổi app drawer — **đã thử 3 lần tổng (text + vision): One UI app-drawer navigation vượt quá khả năng model 7B** |
+
+### Kết quả RE thực hành song song (UnCrackable L1 — xem `2026-11-05-uncrackable-l1.md`)
+
+- Giải tĩnh + nhập secret qua Portal → **Success dialog**.
+- frida-gadget no-root: **bị SELinux chặn socket** trên máy này (kết quả âm đã chứng minh).
+- Thay thế thắng lợi: **smali instrumentation** — inject `Log.e` vào smali, rebuild,
+  secret leak runtime vào logcat dù nhập sai (`E SMALIHOOK: I want to believe`).
 
 ### Bài học thật sự
 
