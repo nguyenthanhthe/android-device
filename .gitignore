@@ -25,3 +25,9 @@ wv-bot/wvbot.zip
 # Local system files
 Thumbs.db
 .DS_Store
+
+# local credentials
+wv-bot/web/config.json
+
+# one-off helper scripts that are written by hand on the machine
+wv-bot/tools/fixpw.txt
