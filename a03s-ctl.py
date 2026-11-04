@@ -353,6 +353,7 @@ def cmd_persist_setup():
     commands = [
         ("Tắt thời gian chờ tự hủy quyền ADB", ["shell", "settings", "put", "global", "adb_allowed_connection_time", "0"]),
         ("Giữ máy luôn thức khi cắm sạc", ["shell", "settings", "put", "global", "stay_on_while_plugged_in", "7"]),
+        ("Không bao giờ tự tắt màn hình", ["shell", "settings", "put", "system", "screen_off_timeout", "2147483647"]),
         ("Khóa đồng bộ test cho device_config", ["shell", "/system/bin/device_config", "set_sync_disabled_for_tests", "persistent"]),
         ("Tắt giới hạn Phantom Process Killer (max_phantom_processes)", ["shell", "/system/bin/device_config", "put", "activity_manager", "max_phantom_processes", "2147483647"]),
         ("Tắt giám sát Phantom Processes", ["shell", "settings", "put", "global", "settings_enable_monitor_phantom_procs", "false"]),
