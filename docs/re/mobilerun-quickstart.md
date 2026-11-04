@@ -38,6 +38,22 @@ mobilerun run "<task tiếng Anh>" --steps 8 --no-vision   # chạy agent
 | "Mở ứng dụng Đồng hồ (Clock)" | 10 | ❌ Swiping lan man trong app drawer, không chạm đúng icon |
 | "Press home, swipe down to open the notification shade, report notifications" | 5/6 | ✅ Đọc đúng shade: Serial Bluetooth Terminal, Termux:Widget, DuckDuckGo… |
 | "Open the Clock app" (qwen2.5vl:7b, --vision, 8 và 16 bước) | — | ❌❌ Agent lạc vào page indicator "Trang 1 trên 5" của home, không vào nổi app drawer — **đã thử 3 lần tổng (text + vision): One UI app-drawer navigation vượt quá khả năng model 7B** |
+| Lần 4 (vòng cron 15): goal phân rã tường minh ("swipe up giữa home → tìm 'Đồng hồ' → tap") + 20 bước | 20 | ❌ Agent swipe vòng vòng, không bao giờ tìm thấy icon |
+
+### Chẩn đoán quyết định (vòng cron 15): giới hạn là CẤU TRÚC, không phải model
+
+Mở drawer thủ công bằng adb rồi dump a11y tree (`mobilerun device ui`): **29
+elements, KHÔNG có text "Đồng hồ"/"Clock"** — One UI app drawer không expose
+tên app vào accessibility tree (chỉ page containers + icon không label).
+Vì vậy:
+
+- Agent text-only: **bất khả** (không có gì để đọc).
+- Agent vision: chỉ đọc được icon qua ảnh màn hình — với 5 trang drawer ×
+  1 swipe/step, ngân sách 20 bước không đủ để quét hết; 7B không nhận diện
+  được icon nhỏ.
+- **Model lớn hơn không sửa được điểm (1).** Workarounds duy nhất khả dĩ:
+  `mobilerun device start <package>`, `mobilerun macro`, hoặc tăng steps + 
+  cải thiện heuristic navigation (out of scope cho stack hiện tại).
 
 ### Kết quả RE thực hành song song (UnCrackable L1 — xem `2026-11-05-uncrackable-l1.md`)
 
