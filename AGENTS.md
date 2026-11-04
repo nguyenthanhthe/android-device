@@ -179,25 +179,39 @@ liên tục đừng dừng lại", khẳng định lại nhiều lần trong ng�
 ### Đã hoàn thành (đừng làm lại)
 
 - Toolchain RE: jadx 1.5.6, apktool 3.0.3, uber-apk-signer, Ghidra 12.2 headless
-  (JDK 25 zip), frida-tools venv, Ollama + mobilerun + Portal 0.7.28.
-- UnCrackable **L1** ✅ ("I want to believe") và **L2** ✅ ("Thanks for all the
-  fish") — writeup tại `docs/re/2026-11-05-uncrackable-l1.md` và
-  `...-l2.md`.
+  (JDK 25 zip — phải JDK 25, path không chứa `+`), frida-tools venv,
+  Ollama + mobilerun + Portal 0.7.28, cmdline-tools trong SDK.
+- UnCrackable **L1** ✅ "I want to believe" · **L2** ✅ "Thanks for all the
+  fish" · **L3** ✅ "making owasp great again" (emulator AOSP rootable
+  `L3Lab`, AVD `system-images;android-35;default;x86_64`) — writeup trong
+  `docs/re/2026-11-05-uncrackable-*.md`.
+- **`scripts/repkg.py`**: pipeline 1 lệnh decode→JSON patch→build→sign→install,
+  có `--auto-move` (fix overflow 65536 bằng move class-group sang
+  `smali_classesN` mới — hiệu quả khi class lỗi owns nhiều refs như DI chain;
+  đã E2E-validate với bomb method-ref).
+- **DDG instrumentation hoàn chỉnh**: SMALIHOOK trong `RealAutofillService`,
+  build qua move `NetworkModule*`→`classes6`; chuỗi onConnected→onFillRequest
+  verified — blocker thật là **process `:autofill` bị freeze**, unfreeze tự
+  nhiên khi focus field sau force-stop+relaunch app target.
 - Chốt luận: **Frida no-root chết trên máy này** (gadget bị SELinux chặn socket;
   frida-server shell-UID không attach được chéo UID). Cách động thay thế:
-  smali instrumentation / native NOP patch.
+  smali instrumentation / native NOP patch / repkg pipeline.
+- Chốt luận mobilerun: **app-drawer là giới hạn cấu trúc** — a11y tree của
+  drawer không expose tên app (đã dump, 29 elements 0 text); model lớn không
+  sửa được. Dùng `device start`/`macro`/goal text-rich.
 
 ### Backlog vòng tiếp theo (nhặt từ trên xuống)
 
-1. **UnCrackable Level 3** — chạy trên **emulator** (AVD trong plugin
-   android-emulator, hoặc Genymotion) vì cần Frida; máy thật không chạy được.
-2. **Patch-pipeline 1 lệnh**: gom apktool d → smali/native patch → apktool b →
-   uber-apk-signer → cài thành `scripts/repkg.py` (dùng lại các bước trong
-   `re-lab/hooks/smali_proof.py` + `l2_proof.py`).
-3. **Instrument DuckDuckGo** theo kiểu SMALIHOOK: log flow `RealAutofillService`.
-4. **Agent vision**: thử lại task app-drawer với model lớn hơn (qwen2.5vl:14b
-   nếu VRAM đủ, hoặc đổi agent prompt) — đã thất bại 3 lần với 7B, xem
-   `docs/re/mobilerun-quickstart.md`.
+1. **SMALIHOOK mở rộng**: log package name của app yêu cầu fill
+   (`FillRequest.getFillContexts()[i].getContext().getPackageName()`) trong
+   `RealAutofillService.onFillRequest` — biến instrumentation thành auto-
+   fill-activity monitor thật trên emulator.
+2. **repkg move nhiều nhóm**: khi auto-move retry chuyển sang class lỗi KHÁC,
+   hiện fail — thêm logic gom nhiều class vào 1 lượt move.
+3. **`mobilerun macro`**: ghi + replay 1 chuỗi thao tác không cần LLM, so sánh
+   chi phí với agent loop cho task lặp.
+4. **Mimosa security_scan lại** khi có thay đổi code lớn trong repo
+   (pre-commit gate vẫn cảnh báo python_ast_unavailable).
 
 ### Ranh giới (không đổi)
 
